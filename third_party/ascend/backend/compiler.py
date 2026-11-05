@@ -530,18 +530,22 @@ def linalg_to_bc_by_triton_mlir_opt(linalg: str, metadata, opt):
         triton_mlir_opt_path = _get_triton_mlir_opt_path()
 
         # The --emit-bytecode flag ensures output is in BC format.
-        # Override the emitted bytecode version for compatibility testing with
-        # older bishengir-opt builds, e.g. TRITON_ASCEND_MLIRBC_VERSION=5.
-        cmd = [
+        #
+        # Pin the bytecode version: triton-mlir-opt is built against this tree's
+        # LLVM (22) and defaults to bytecode v6, but the consumer (bishengir-opt,
+        # from CANN, built against LLVM 19) cannot read the location encoding
+        # used from v5 onward and failed. v4 is the newest version both sides
+        # agree on once debug locations are present. Override with
+        # TRITON_ASCEND_BYTECODE_VERSION for bishengir-opt.
+        bytecode_version = os.environ.get("TRITON_ASCEND_BYTECODE_VERSION", "4")
+        subprocess.run([
             triton_mlir_opt_path,
             ttadapter_path,
             "--emit-bytecode",
-        ]
-        bytecode_version = os.getenv("TRITON_ASCEND_MLIRBC_VERSION")
-        if bytecode_version:
-            cmd.append(f"--emit-bytecode-version={bytecode_version}")
-        cmd += ["-o", bc_path]
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+            f"--emit-bytecode-version={bytecode_version}",
+            "-o",
+            bc_path,
+        ], check=True, capture_output=True, text=True)
 
         # Read bytecode as binary before temp directory is cleaned up
         with open(bc_path, "rb") as f:
@@ -1729,7 +1733,7 @@ class AscendBackend(BaseBackend):
         version_key = (
             self.target,
             _get_libdevice_compile_state(self.target.arch),
-            os.getenv("TRITON_ASCEND_MLIRBC_VERSION", ""),
+            os.environ.get("TRITON_ASCEND_BYTECODE_VERSION", "4"),
         )
         return str(version_key)
 
