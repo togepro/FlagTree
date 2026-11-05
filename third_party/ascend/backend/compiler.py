@@ -448,6 +448,69 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=True):
         return _serialize_module(mod, opt)
 
 
+def _memref_to_tensor_type(memref: str) -> str:
+    """Return the tensor type corresponding to a memref type string."""
+    assert memref.startswith("memref<") and memref.endswith(">")
+    inner = memref[len("memref<"):-1]
+    depth = 0
+    for i, ch in enumerate(inner):
+        if ch == "<":
+            depth += 1
+        elif ch == ">":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            # Drop the memory space and layout suffix.
+            inner = inner[:i]
+            break
+    return f"tensor<{inner}>"
+
+
+def _add_to_tensor_result_type(ir_text: str) -> str:
+    """Make bufferization.to_tensor parseable by the MLIR 22 toolchain.
+
+    The LLVM 22 build used by the Ascend toolchain prints
+    ``bufferization.to_tensor`` without its result type, while the matching
+    parser requires ``to tensor<...>``. Add the inferred tensor type before
+    handing the text to triton-mlir-opt.
+    """
+    marker = "bufferization.to_tensor"
+    out = []
+    for line in ir_text.splitlines(keepends=True):
+        marker_idx = line.find(marker)
+        if marker_idx == -1:
+            out.append(line)
+            continue
+        colon_idx = line.find(":", marker_idx)
+        if colon_idx == -1 or re.search(r"\bto\s+tensor<", line[colon_idx:]) is not None:
+            out.append(line)
+            continue
+        memref_match = re.search(r"memref<", line[colon_idx:])
+        if memref_match is None:
+            out.append(line)
+            continue
+        start = colon_idx + memref_match.start()
+        depth = 0
+        end = None
+        for i in range(start, len(line)):
+            ch = line[i]
+            if ch == "<":
+                depth += 1
+            elif ch == ">":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+        if end is None:
+            out.append(line)
+            continue
+        memref = line[start:end]
+        if not memref.startswith("memref<"):
+            out.append(line)
+            continue
+        out.append(line[:end] + " to " + _memref_to_tensor_type(memref) + line[end:])
+    return "".join(out)
+
+
 def linalg_to_bc_by_triton_mlir_opt(linalg: str, metadata, opt):
     """
     Convert Linalg IR to MLIR Bytecode format using triton-mlir-opt.
@@ -462,7 +525,7 @@ def linalg_to_bc_by_triton_mlir_opt(linalg: str, metadata, opt):
     with tempfile.TemporaryDirectory() as tmpdir:
         ttadapter_path = os.path.join(tmpdir, "kernel.ttadapter.mlir")
         bc_path = os.path.join(tmpdir, "kernel.mlirbc")
-        Path(ttadapter_path).write_text(linalg)
+        Path(ttadapter_path).write_text(_add_to_tensor_result_type(linalg))
 
         triton_mlir_opt_path = _get_triton_mlir_opt_path()
 
