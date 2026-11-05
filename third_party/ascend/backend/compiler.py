@@ -1431,7 +1431,9 @@ class NPUOptions:
     simt_reorder_instruction: bool = field(default=False, init=False)
     storage_align: Optional[bool] = field(default=None, init=False)
     stream: Optional[int] = field(default=None, init=False)
-    use_bytecode: bool = field(default=True, init=False)
+    # MLIR bytecode produced by triton-mlir-opt (MLIR 22) is not compatible
+    # with the bishengir-opt shipped in CANN 9.2.1. Use the text pipeline.
+    use_bytecode: bool = field(default=False, init=False)
 
     def __post_init__(self, arch, rule_mask):
         from triton.backends.ascend import _apply_ascend_patch
@@ -1704,9 +1706,9 @@ class AscendBackend(BaseBackend):
                 stages["npubin"] = (lambda src, metadata: ttir_to_npubin(src, metadata, options))
                 return
             stages["ttadapter"] = lambda src, metadata: ttir_to_linalg(src, metadata, options)
-            # Normal kernels always convert Linalg IR to bytecode and back to MLIR text.
-            stages["mlirbc"] = lambda src, metadata: linalg_to_bc_by_triton_mlir_opt(src, metadata, options)
-            stages["bcmlir"] = lambda src, metadata: bc_to_linalg_by_bishengir_opt(src, metadata, options)
+            if options.use_bytecode:
+                stages["mlirbc"] = lambda src, metadata: linalg_to_bc_by_triton_mlir_opt(src, metadata, options)
+                stages["bcmlir"] = lambda src, metadata: bc_to_linalg_by_bishengir_opt(src, metadata, options)
             if options.compile_on_910_95:
                 stages["npubin"] = (
                     lambda src, metadata: linalg_to_bin_enable_npu_compile_910_95(src, metadata, options))
