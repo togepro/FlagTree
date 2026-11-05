@@ -49,11 +49,9 @@ set_property(DIRECTORY PROPERTY RULE_LAUNCH_LINK ${_saved_launch_link})
 include_directories(${ASCENDNPU_IR_SRC_DIR}/bishengir/include)
 include_directories(${ASCENDNPU_IR_BINARY_DIR}/bishengir/include) # Tablegen'd files
 
+add_subdirectory(bin)
 add_subdirectory(include)
 add_subdirectory(lib)
-add_subdirectory(bin)
-
-add_triton_library(Registrar Registrar.cc)
 
 if(TRITON_BUILD_TD)
   if(NOT EXISTS "${TRITON_DISTRIBUTED_ASCEND_SRC_DIR}/CMakeLists.txt")
@@ -150,23 +148,11 @@ add_triton_plugin(TritonAscend
   ${CMAKE_CURRENT_SOURCE_DIR}/triton_ascend.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/ascend_ir.cc
   LINK_LIBS
-  CommonIRToHIVM
-  TensorViewIR
-  TensorViewLowering
   TritonToGraph
   TritonToLinalg
   BiShengIRScopeDialect
   BiShengIRHIVMDialect
 )
-
-target_compile_definitions(TritonAscend PRIVATE __TLE_DSA__)
-
-if(TARGET CommonIRToHIVM)
-  add_dependencies(TritonAscend CommonIRToHIVM TensorViewIR TensorViewLowering)
-endif()
-
-target_include_directories(TritonAscend BEFORE PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/python/src)
 
 option(TRITON_ENABLE_COVERAGE_LLVM_COV "Enable code llvm-cov coverage tool for Ascend plugin " OFF)
 if(TRITON_ENABLE_COVERAGE_LLVM_COV)

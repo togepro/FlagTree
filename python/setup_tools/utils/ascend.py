@@ -22,15 +22,6 @@
 
 import os
 import platform
-import shutil
-import subprocess
-import sys
-
-# setup_helper loads this file with importlib under the synthetic module name
-# "module"; make its sibling modules importable by name.
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-if _THIS_DIR not in sys.path:
-    sys.path.insert(0, _THIS_DIR)
 
 # Upstream triton-ascend 3.6 pins LLVM f6ded0be and applies this patch before
 # building. The resulting MLIR has extra bufferization ops (to_memref,
@@ -47,63 +38,6 @@ ASCENDNPU_IR_COMMIT = "bb13ef6120526aa3df6f950006af5ec0e585d2f6"
 # them opt-in; the NVIDIA dependency download is skipped entirely in setup.py.
 os.environ.setdefault("TRITON_BUILD_PROTON", "OFF")
 os.environ.setdefault("TRITON_BUILD_FLAGPRISM", "OFF")
-
-
-def precompile_hook_ascend(*args, **kwargs):
-    """Fetch the FLIR revision required by the Ascend CommonIR lowering."""
-    from tools import DownloadManager, Module, flagtree_configs
-
-    downloader = DownloadManager()
-    flir = Module(
-        name="flir-ascend",
-        url="https://github.com/kateyijian/flir.git",
-        commit_id="482b60b881219cab7df987f005b9d8bf5c97cbe5",
-        dst_path=os.path.join(flagtree_configs.flagtree_submodule_dir, "flir"),
-    )
-    downloader.download(module=flir, required=True)
-    return kwargs.get("default_backends")
-
-
-def install_extension(*args, **kwargs):
-    """Copy the Ascend MLIR tools next to libtriton.so.
-
-    The runtime looks for ``triton-mlir-opt`` in ``triton/_C`` before PATH.
-    ``triton-opt`` is optional but copied when the core bin target was built.
-    """
-    build_ext = kwargs.get("build_ext")
-    if build_ext is None:
-        return
-    try:
-        ext = build_ext.extensions[0]
-        extdir = os.path.abspath(os.path.dirname(build_ext.get_ext_fullpath(ext.path)))
-    except (AttributeError, IndexError):
-        return
-    try:
-        from python.build_helpers import get_cmake_dir
-        cmake_dir = get_cmake_dir()
-    except Exception:
-        cmake_dir = getattr(build_ext, "build_temp", None)
-    if not cmake_dir:
-        return
-
-    for rel_src, name in (
-        ("third_party/ascend/bin/triton-mlir-opt", "triton-mlir-opt"),
-        ("bin/triton-opt", "triton-opt"),
-    ):
-        src = os.path.join(cmake_dir, rel_src)
-        if not os.path.isfile(src):
-            continue
-        dst = os.path.join(extdir, name)
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        shutil.copy2(src, dst)
-        if platform.system() != "Windows":
-            os.chmod(dst, 0o755)
-            try:
-                subprocess.run(["strip", "--strip-all", dst], check=False,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except FileNotFoundError:
-                pass
-        print(f"[ascend] copied {name} to {dst}")
 
 
 def _is_linux_os(os_id: str) -> bool:
