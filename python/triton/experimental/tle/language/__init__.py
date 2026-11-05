@@ -78,6 +78,10 @@ def create_dist_tensor(buf_tensor):
 _EXTENSION_APIS = frozenset({
     "make_tensor_view",
     "make_partition_view",
+    "make_strided_view",
+    "make_gather_scatter_view",
+    "tile_load",
+    "tile_store",
     "make_view",
     "dim",
     "load_view_tko",
@@ -89,6 +93,9 @@ _EXTENSION_APIS = frozenset({
 
 # Keep ordinary TLE imports independent of backend-specific extensions.
 def __getattr__(name):
+    if name in {"tile_load", "tile_store"}:
+        from . import dsa
+        return getattr(dsa, name)
     if name not in _EXTENSION_APIS:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     language_extensions = getattr(_language, "ext", None)

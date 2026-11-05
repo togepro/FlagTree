@@ -37,7 +37,10 @@ namespace triton {
 /// Creates a pass to convert CommonIR dialect to HIVM dialect.
 std::unique_ptr<OperationPass<ModuleOp>> createCommonIRToHIVMPass();
 
-/// Creates a pass that legalizes tv.ptr kernel arguments to memref<?xT, GM>.
+/// Creates a pass to reduce sum strength for profitable add reductions.
+std::unique_ptr<OperationPass<ModuleOp>> createReduceSumStrengthPass();
+/// Creates a pass that legalizes view base pointer kernel arguments to
+/// memref<?xT, GM>.
 std::unique_ptr<OperationPass<ModuleOp>> createCommonIRTvPtrLegalizePass();
 
 #define GEN_PASS_REGISTRATION

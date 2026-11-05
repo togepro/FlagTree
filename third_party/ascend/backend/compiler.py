@@ -355,6 +355,7 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=True):
         compile_on_910_95 = metadata["compile_on_910_95"]
         compile_mode = opt.compile_mode
         metadata["compile_mode"] = compile_mode
+        use_commonir_tensor_view = metadata.get("use_commonir_tensor_view", True)
         enable_mixed_cv = metadata.get("enable_mixed_cv")
         disable_auto_inject_block_sync = metadata.get("disable_auto_inject_block_sync")
         set_workspace_multibuffer = metadata.get("set_workspace_multibuffer")
@@ -380,6 +381,13 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=True):
         ascend.passes.ttir.add_discrete_mask_access_conversion(pm, compile_on_910_95, compile_mode)
         ascend.passes.ttir.add_triton_to_annotation(pm)
         ascend.passes.ttir.add_triton_to_unstructure(pm, compile_on_910_95, compile_mode)
+        if use_commonir_tensor_view:
+            # Legalize tv.ptr kernel arguments, then lower CommonIR tile.* ops
+            # and inline unresolved !tile.buf signatures.
+            ascend.passes.ttir.add_commonir_tv_ptr_legalize(pm)
+            ascend.passes.ttir.add_commonir_to_hivm(pm)
+            passes.common.add_inliner(pm)
+            passes.common.add_canonicalizer(pm)
         ascend.passes.ttir.add_triton_to_hivm(pm)
         ascend.passes.ttir.add_triton_to_hfusion(pm, compile_on_910_95)
         ascend.passes.ttir.add_triton_to_llvm(pm)
@@ -1420,6 +1428,7 @@ class NPUOptions:
     enable_select_analysis: bool = field(default=True, init=False)
     enable_simt_reorder_instruction: bool = field(default=False, init=False)
     enable_sync_block_lock: Optional[bool] = field(default=None, init=False)
+    use_commonir_tensor_view: bool = True
     enable_ub_refine_opt: bool = field(default=False, init=False)
     enable_vf_fusion: Optional[bool] = field(default=None, init=False)
     force_simt_only: bool = field(default=False, init=False)

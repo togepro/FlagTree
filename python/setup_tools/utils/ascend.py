@@ -48,6 +48,39 @@ ASCENDNPU_IR_COMMIT = "bb13ef6120526aa3df6f950006af5ec0e585d2f6"
 os.environ.setdefault("TRITON_BUILD_PROTON", "OFF")
 os.environ.setdefault("TRITON_BUILD_FLAGPRISM", "OFF")
 
+# FLIR revision carrying the CommonIR and TensorView dialects used by the
+# Ascend 3.5-compatible lowering path.
+FLIR_ASCEND_URL = "https://github.com/flagos-ai/flir.git"
+FLIR_ASCEND_COMMIT = "4ad96efad2f890c2b1d6135674775787d6c7f363"
+
+
+def precompile_hook_ascend(*args, **kwargs):
+    """Fetch and pin the FLIR revision required by the Ascend lowering."""
+    from tools import DownloadManager, Module, flagtree_configs
+
+    dst_path = os.path.join(flagtree_configs.flagtree_submodule_dir, "flir")
+    flir = Module(
+        name="flir-ascend",
+        url=FLIR_ASCEND_URL,
+        commit_id=FLIR_ASCEND_COMMIT,
+        dst_path=dst_path,
+    )
+    downloader = DownloadManager()
+    downloader.download(module=flir, required=True)
+
+    # DownloadManager reuses an existing checkout as-is. Make sure a stale
+    # FLIR tree does not silently shadow the pinned revision.
+    if os.path.isdir(os.path.join(dst_path, ".git")):
+        head = subprocess.run(["git", "-C", dst_path, "rev-parse", "HEAD"], capture_output=True, text=True)
+        current = head.stdout.strip() if head.returncode == 0 else ""
+        if current != FLIR_ASCEND_COMMIT:
+            print(f"[WARNING] {dst_path} is at {current[:8] or 'unknown'} but this build pins "
+                  f"FLIR to {FLIR_ASCEND_COMMIT[:8]}; checking out the pinned revision")
+            subprocess.run(["git", "-C", dst_path, "fetch", "--depth", "1", FLIR_ASCEND_URL,
+                            FLIR_ASCEND_COMMIT], check=True)
+            subprocess.run(["git", "-C", dst_path, "checkout", "--detach", FLIR_ASCEND_COMMIT], check=True)
+    return kwargs.get("default_backends")
+
 
 def install_extension(*args, **kwargs):
     """Copy the Ascend MLIR tools next to libtriton.so.

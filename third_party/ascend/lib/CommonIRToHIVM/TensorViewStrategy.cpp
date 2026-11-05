@@ -36,7 +36,8 @@ chooseTensorViewPlan(const TensorViewAccessInfo &view,
 
   // The payload is the dense suffix after the last sparse dim. Leading sparse
   // dims read index tensors; leading dense dims use index * traversal + coord.
-  // Either ordering uses the same payload DMA; sparse dims need not be a prefix.
+  // Either ordering uses the same payload DMA; sparse dims need not be a
+  // prefix.
   if (access.sparseDims.empty())
     return plan;
 

@@ -58,8 +58,8 @@ void emitElementwiseFill(OpBuilder &b, Location loc,
 /// Out-of-bounds elements retain the padding value. SingleAffineDMA is not
 /// implemented or selected.
 FailureOr<Value> emitGatherLoad(OpBuilder &b, Location loc,
-                                const TensorViewAccessInfo &info, ValueRange indices,
-                                RankedTensorType resultType,
+                                const TensorViewAccessInfo &info,
+                                ValueRange indices, RankedTensorType resultType,
                                 hivm::AddressSpace space, Value pad);
 
 /// Unsupported views return failure(). ScalarTransfer checks each element;
@@ -69,8 +69,9 @@ FailureOr<Value> emitGatherLoad(OpBuilder &b, Location loc,
 ///
 /// Sparse-index conflicts are intentionally not analyzed.
 LogicalResult emitScatterStore(OpBuilder &b, Location loc,
-                               const TensorViewAccessInfo &info, ValueRange indices,
-                               Value source, hivm::AddressSpace space);
+                               const TensorViewAccessInfo &info,
+                               ValueRange indices, Value source,
+                               hivm::AddressSpace space);
 
 } // namespace triton
 } // namespace mlir

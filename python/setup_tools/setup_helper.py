@@ -888,7 +888,12 @@ else:
 
 cache = FlagTreeCache()
 
-download_flagtree_third_party("flir", condition=(flagtree_backend == "tsingmicro"), required=True)
+if flagtree_backend == "ascend":
+    _ascend_precompile = get_hook_instance("precompile_hook_ascend")
+    if _ascend_precompile:
+        _ascend_precompile(configs=configs, cache=cache)
+
+download_flagtree_third_party("flir", condition=(flagtree_backend in ("tsingmicro", "ascend")), required=True)
 '''
    FlagCX is a third-party library adopted by the tle distributed system,
    refer to https://github.com/flagos-ai/FlagCX

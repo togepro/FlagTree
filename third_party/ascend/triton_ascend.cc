@@ -1,4 +1,5 @@
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -23,6 +24,13 @@
 #include "ascend/include/TritonToLinalg/Passes.h"
 #include "ascend/include/TritonToStructured/Passes.h"
 #include "ascend/include/TritonToUnstructure/Passes.h"
+
+#include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
+#include "triton-shared/Dialect/TensorView/IR/TensorViewDialect.h"
+
+#ifdef __TLE_DSA__
+#include "ascend/include/CommonIRToHIVM/Passes.h"
+#endif
 
 #include "ascend/include/DynamicCVPipeline/AnalyzeDataFlow.h"
 #include "ascend/include/DynamicCVPipeline/Common/BufferCountManager.h"
@@ -65,6 +73,16 @@ void init_triton_ascend_passes_ttir(py::module &&m) {
     opts.autoBlockifySize = autoBlockifySize;
     pm.addPass(mlir::triton::createAutoBlockifyPass(opts));
   });
+
+#ifdef __TLE_DSA__
+  m.def("add_commonir_tv_ptr_legalize", [](mlir::PassManager &pm) {
+    pm.addPass(mlir::triton::createCommonIRTvPtrLegalizePass());
+  });
+
+  m.def("add_commonir_to_hivm", [](mlir::PassManager &pm) {
+    pm.addPass(mlir::triton::createCommonIRToHIVMPass());
+  });
+#endif
 
   m.def("add_triton_to_structure",
         [](mlir::PassManager &pm, bool enableMaskFallbackConversion,
@@ -464,7 +482,15 @@ void init_triton_ascend(py::module &&m) {
   // load dialects
   m.def("load_dialects", [](mlir::MLIRContext &context) {
     mlir::DialectRegistry registry;
-    registry.insert<mlir::triton::ascend::TritonAscendDialect>();
+    registry.insert<mlir::triton::ascend::TritonAscendDialect,
+                    mlir::triton::tv::TensorViewDialect,
+                    mlir::triton::tile::CommonIRDialect,
+                    mlir::func::FuncDialect>();
+    // MLIR 22 moved the func dialect's inliner interface into an explicit
+    // dialect extension. The CommonIR pipeline adds an inline pass, so it must
+    // be registered or MLIR aborts with "dialect 'func' promised
+    // DialectInlinerInterface but never implemented".
+    mlir::func::registerInlinerExtension(registry);
     context.appendDialectRegistry(registry);
     context.loadAllAvailableDialects();
   });

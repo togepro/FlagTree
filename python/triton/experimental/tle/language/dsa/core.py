@@ -609,10 +609,12 @@ def insert_slice(x: tl.tensor, tile: tl.tensor, offsets, sizes=None, strides=Non
 @tl.builtin
 def tile_load(src, index=None, dst_space=None, _semantic=None, _generator=None) -> tensor:
     """Load a tile from an encoded tensor_view via tile.load."""
+    from . import semantic as tle_semantic
     return tle_semantic.tile_load(src, index, dst_space, _semantic.builder)
 
 
 @tl.builtin
 def tile_store(src, value=None, index=None, dst=None, src_space=None, _semantic=None, _generator=None):
     """Store a tile into an encoded tensor_view via tile.store."""
+    from . import semantic as tle_semantic
     tle_semantic.tile_store(src, dst, value, index, _semantic.builder, src_space)

@@ -114,7 +114,6 @@ struct DensePayloadInfo {
   void dump() const;
 };
 
-
 struct TensorViewAccessInfo {
   /// Defaulted so a partially built info (traceView's early returns) never
   /// carries an indeterminate kind.
@@ -164,14 +163,10 @@ struct GatherScatterAccessInfo {
   void dump() const;
 };
 
-raw_ostream &operator<<(raw_ostream &os,
-                              const IndexPatternInfo &info);
-raw_ostream &operator<<(raw_ostream &os,
-                              const DensePayloadInfo &info);
-raw_ostream &operator<<(raw_ostream &os,
-                              const TensorViewAccessInfo &info);
-raw_ostream &operator<<(raw_ostream &os,
-                              const GatherScatterAccessInfo &info);
+raw_ostream &operator<<(raw_ostream &os, const IndexPatternInfo &info);
+raw_ostream &operator<<(raw_ostream &os, const DensePayloadInfo &info);
+raw_ostream &operator<<(raw_ostream &os, const TensorViewAccessInfo &info);
+raw_ostream &operator<<(raw_ostream &os, const GatherScatterAccessInfo &info);
 
 FailureOr<GatherScatterAccessInfo>
 analyzeGatherScatterAccess(const TensorViewAccessInfo &view,

@@ -29,8 +29,8 @@
 //
 // Strategy: greedy rewrite runs patterns iteratively to fixed point.
 //   Step 1: tile.alloc → memref.alloc with #hivm.address_space.
-//   Step 2: tile.to_tensor → UnrealizedConversionCast bridging memref to tensor.
-//   Step 3: tile.copy → hivm.copy (tile.* src, on-chip DMA)
+//   Step 2: tile.to_tensor → UnrealizedConversionCast bridging memref to
+//   tensor. Step 3: tile.copy → hivm.copy (tile.* src, on-chip DMA)
 //                    or memref.copy (!tt.ptr src, GM↔local DMA; the ptr is
 //                    bridged to memref via UnrealizedConversionCast)
 //           tile.store_tensor → hivm.copy.
@@ -45,7 +45,6 @@
 
 #include "bishengir/Dialect/HIVM/IR/HIVM.h"
 #include "mlir-ext/Dialect/CommonIR/IR/CommonIRDialect.h"
-#include "triton-shared/Dialect/TensorView/IR/TensorViewDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -58,6 +57,8 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "triton-shared/Dialect/TensorView/IR/TensorViewBuilder.h"
+#include "triton-shared/Dialect/TensorView/IR/TensorViewDialect.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/Triton/IR/Types.h"
 #include "llvm/ADT/APFloat.h"
@@ -215,20 +216,20 @@ static bool isTensorOfPointer(Type ty) {
 inline PaddingValue getPaddingValue(tv::PaddingValue value) {
   PaddingValue pad = PaddingValue::ZERO;
   switch (value) {
-    case tv::PaddingValue::ZERO:
-      pad = PaddingValue::ZERO;
-      break;
-    case tv::PaddingValue::NAN_VALUE:
-      pad = PaddingValue::NAN_VALUE;
-      break;
-    case tv::PaddingValue::POS_INF:
-      pad = PaddingValue::POS_INF;
-      break;
-    case tv::PaddingValue::NEG_INF:
-      pad = PaddingValue::NEG_INF;
-      break;
-    default:
-      break;
+  case tv::PaddingValue::ZERO:
+    pad = PaddingValue::ZERO;
+    break;
+  case tv::PaddingValue::NAN_VALUE:
+    pad = PaddingValue::NAN_VALUE;
+    break;
+  case tv::PaddingValue::POS_INF:
+    pad = PaddingValue::POS_INF;
+    break;
+  case tv::PaddingValue::NEG_INF:
+    pad = PaddingValue::NEG_INF;
+    break;
+  default:
+    break;
   }
   return pad;
 }
@@ -340,10 +341,11 @@ static TensorViewAccessInfo traceView(Value view, PatternRewriter &rewriter) {
   info.strides.assign(makeView.getStrides().begin(),
                       makeView.getStrides().end());
 
-  // The view *type*'s strides are usually all-dynamic even when the operands are
-  // built from constants (a make_tensor_view on a runtime pointer carries
+  // The view *type*'s strides are usually all-dynamic even when the operands
+  // are built from constants (a make_tensor_view on a runtime pointer carries
   // `strides=[?, ?]`), so fold each operand's constant value in here. Without
-  // this, any contiguity test over `staticStrides` is unsatisfiable in practice.
+  // this, any contiguity test over `staticStrides` is unsatisfiable in
+  // practice.
   info.staticStrides.assign(baseTy.getStrides().begin(),
                             baseTy.getStrides().end());
   for (unsigned d = 0; d < info.staticStrides.size(); ++d) {
@@ -364,7 +366,8 @@ static TensorViewAccessInfo traceView(Value view, PatternRewriter &rewriter) {
 // the familiar `index * tile` start. Valid length always clamps against the
 // tile extent, independent of the traversal stride.
 static Value emitViewGeometry(OpBuilder &builder, Location loc,
-                              const TensorViewAccessInfo &info, ValueRange indices,
+                              const TensorViewAccessInfo &info,
+                              ValueRange indices,
                               SmallVectorImpl<Value> *validLengths) {
   Value offset;
   for (unsigned viewDim = 0; viewDim < info.rank(); ++viewDim) {
@@ -379,8 +382,7 @@ static Value emitViewGeometry(OpBuilder &builder, Location loc,
           builder.create<arith::ConstantIndexOp>(loc, info.tile[viewDim]);
       Value extent = asIndexValue(builder, loc, info.shape[baseDim]);
       Value remaining = builder.create<arith::SubIOp>(loc, extent, logical);
-      Value length =
-          builder.create<arith::MinSIOp>(loc, remaining, tileSize);
+      Value length = builder.create<arith::MinSIOp>(loc, remaining, tileSize);
       Value zero = builder.create<arith::ConstantIndexOp>(loc, 0);
       validLengths->push_back(
           builder.create<arith::MaxSIOp>(loc, length, zero));
@@ -415,10 +417,9 @@ static Value emitViewGmTile(OpBuilder &builder, Location loc,
 
   auto layout = StridedLayoutAttr::get(builder.getContext(),
                                        ShapedType::kDynamic, staticStrides);
-  auto gmSpace = hivm::AddressSpaceAttr::get(builder.getContext(),
-                                             hivm::AddressSpace::GM);
-  auto gmTy =
-      MemRefType::get(info.tile, info.elementType, layout, gmSpace);
+  auto gmSpace =
+      hivm::AddressSpaceAttr::get(builder.getContext(), hivm::AddressSpace::GM);
+  auto gmTy = MemRefType::get(info.tile, info.elementType, layout, gmSpace);
   return builder.create<memref::ReinterpretCastOp>(
       loc, gmTy, info.base, OpFoldResult(offset), sizes, strides);
 }
@@ -435,7 +436,8 @@ static Value emitPrefixSubview(OpBuilder &builder, Location loc, Value source,
     sizes.push_back(OpFoldResult(length));
     strides.push_back(builder.getIndexAttr(1));
   }
-  return builder.create<memref::SubViewOp>(loc, source, offsets, sizes, strides);
+  return builder.create<memref::SubViewOp>(loc, source, offsets, sizes,
+                                           strides);
 }
 
 // Resolve the on-chip memory space carried by a tile.load/tile.store into a
@@ -451,8 +453,8 @@ resolveTileSpace(std::optional<tile::MemorySpace> space) {
 
 // Build the constant used to fill a tile's out-of-bounds lanes according to the
 // view's padding value: the tail lanes of a dense boundary tile or the
-// out-of-range lanes of a gather_scatter gather. Float element types support the
-// IEEE special pads (nan / +inf / -inf); integers only support zero.
+// out-of-range lanes of a gather_scatter gather. Float element types support
+// the IEEE special pads (nan / +inf / -inf); integers only support zero.
 static Value emitPadConstant(OpBuilder &builder, Location loc, Type elementType,
                              PaddingValue padding) {
   if (auto floatTy = dyn_cast<FloatType>(elementType)) {
@@ -511,22 +513,23 @@ static Value emitAllInBounds(OpBuilder &b, Location loc,
 }
 
 // Load a dense (partition/strided) tile, choosing at runtime between a
-// whole-tile DMA and emitElementwiseFill's padded gather. Whether the tile stays
-// in bounds is a runtime property of the base view's shape, so scf.if picks
-// the branch once per tile invocation rather than at compile time. Both
+// whole-tile DMA and emitElementwiseFill's padded gather. Whether the tile
+// stays in bounds is a runtime property of the base view's shape, so scf.if
+// picks the branch once per tile invocation rather than at compile time. Both
 // branches fill the same UB buffer, which keeps the scf.if result-free and
 // gives the tile a single definition regardless of which one ran. A boundary
 // tile takes the gather branch even though the view is dense, because the
 // in-bounds region of a multi-dim tile is generally L-shaped and cannot be
 // expressed as a single rectangular subview of the whole-tile DMA.
 static Value emitDenseTileLoad(OpBuilder &b, Location loc,
-                               const TensorViewAccessInfo &info, ValueRange indices,
-                               Value offset, ValueRange validLengths,
+                               const TensorViewAccessInfo &info,
+                               ValueRange indices, Value offset,
+                               ValueRange validLengths,
                                hivm::AddressSpace dstSpace,
                                RankedTensorType resultTy, Value pad) {
   Value ub = b.create<memref::AllocOp>(
-      loc, makeSpaceMemref(b.getContext(), info.tile, info.elementType,
-                          dstSpace));
+      loc,
+      makeSpaceMemref(b.getContext(), info.tile, info.elementType, dstSpace));
   Value allInBounds = emitAllInBounds(b, loc, info, validLengths);
   b.create<scf::IfOp>(
       loc, allInBounds,
@@ -546,9 +549,11 @@ static Value emitDenseTileLoad(OpBuilder &b, Location loc,
 // and every other dimension with a scalar index; a dense view (empty
 // sparseDims) therefore expects all-scalar indices. Reject a mismatched operand
 // so the element-access emitters can assume the pairing holds.
-static bool viewIndicesWellTyped(const TensorViewAccessInfo &info, ValueRange indices) {
+static bool viewIndicesWellTyped(const TensorViewAccessInfo &info,
+                                 ValueRange indices) {
   for (unsigned d = 0; d < indices.size(); ++d) {
-    bool isSparse = llvm::is_contained(info.sparseDims, static_cast<int64_t>(d));
+    bool isSparse =
+        llvm::is_contained(info.sparseDims, static_cast<int64_t>(d));
     bool isTensor = isa<RankedTensorType>(indices[d].getType());
     if (isSparse != isTensor)
       return false;
@@ -588,7 +593,8 @@ static LogicalResult lowerViewLoad(tile::LoadOp op, PatternRewriter &rewriter) {
     return rewriter.notifyMatchFailure(op, "unsupported TensorView load shape");
   if (!viewIndicesWellTyped(info, op.getIndices()))
     return rewriter.notifyMatchFailure(
-        op, "TensorView load: sparse dims need tensor indices, dense dims scalar");
+        op,
+        "TensorView load: sparse dims need tensor indices, dense dims scalar");
 
   Location loc = op.getLoc();
   // Only the GM -> UB DMA is lowered here; other on-chip spaces
@@ -605,9 +611,9 @@ static LogicalResult lowerViewLoad(tile::LoadOp op, PatternRewriter &rewriter) {
     SmallVector<Value> validLengths;
     Value offset =
         emitViewGeometry(rewriter, loc, info, op.getIndices(), &validLengths);
-    Value tensor = emitDenseTileLoad(rewriter, loc, info, op.getIndices(),
-                                     offset, validLengths, space, resultTy,
-                                     pad);
+    Value tensor =
+        emitDenseTileLoad(rewriter, loc, info, op.getIndices(), offset,
+                          validLengths, space, resultTy, pad);
     rewriter.replaceOp(op, tensor);
     return success();
   }
@@ -619,8 +625,8 @@ static LogicalResult lowerViewLoad(tile::LoadOp op, PatternRewriter &rewriter) {
   // A failure means the view is not lowerable at all, which leaves the
   // tile.load for whoever can handle it rather than being quietly dropped.
   // GatherScatterView
-  auto gathered =
-      emitGatherLoad(rewriter, loc, info, op.getIndices(), resultTy, space, pad);
+  auto gathered = emitGatherLoad(rewriter, loc, info, op.getIndices(), resultTy,
+                                 space, pad);
   if (failed(gathered))
     return rewriter.notifyMatchFailure(op, "TensorView load: view is not "
                                            "lowerable as a gather");
@@ -937,7 +943,8 @@ struct TileLoadToHIVM : OpRewritePattern<tile::LoadOp> {
 
   LogicalResult matchAndRewrite(tile::LoadOp op,
                                 PatternRewriter &rewriter) const final {
-    // TensorView operand -> direct lowering (dense DMA or gather_scatter gather).
+    // TensorView operand -> direct lowering (dense DMA or gather_scatter
+    // gather).
     if (auto viewTy = dyn_cast<tv::TensorViewType>(op.getSrc().getType())) {
       if (isViewLowerable(viewTy, op.getIndices().size()))
         return lowerViewLoad(op, rewriter);
@@ -961,7 +968,8 @@ struct TileStoreToHIVM : OpRewritePattern<tile::StoreOp> {
 
   LogicalResult matchAndRewrite(tile::StoreOp op,
                                 PatternRewriter &rewriter) const final {
-    // TensorView destination -> direct lowering (dense DMA or gather_scatter scatter).
+    // TensorView destination -> direct lowering (dense DMA or gather_scatter
+    // scatter).
     if (auto viewTy = dyn_cast<tv::TensorViewType>(op.getDst().getType())) {
       if (isViewLowerable(viewTy, op.getIndices().size()))
         return lowerViewStore(op, rewriter);
@@ -1053,68 +1061,6 @@ struct TileGmOffsetToHIVM : OpRewritePattern<tile::GmOffsetOp> {
       result = rewriter.create<arith::AddIOp>(loc, result, off);
     }
     rewriter.replaceOp(op, result);
-    return success();
-  }
-};
-
-// =============================================================================
-// tile.concat
-//     - 1D: tensor.empty + a sequence of tensor.insert_slice
-//     - 2D+: tensor.concat
-// =============================================================================
-struct TileConcatToHIVM : OpRewritePattern<tile::ConcatOp> {
-  using OpRewritePattern<tile::ConcatOp>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(tile::ConcatOp op,
-                                PatternRewriter &rewriter) const final {
-    auto loc = op.getLoc();
-    Value lhs = op.getLhs();
-    Value rhs = op.getRhs();
-    int64_t dim = op.getDim();
-
-    auto resType = dyn_cast<RankedTensorType>(op.getResult().getType());
-    auto lhsType = dyn_cast<RankedTensorType>(lhs.getType());
-    auto rhsType = dyn_cast<RankedTensorType>(rhs.getType());
-    if (!resType || !lhsType || !rhsType)
-      return rewriter.notifyMatchFailure(op, "expected ranked tensor operands");
-
-    int64_t rank = resType.getRank();
-    if (dim < 0 || dim >= rank)
-      return rewriter.notifyMatchFailure(op, "concat dim out of range");
-
-    // 2D+ tensors: lower directly to tensor.concat, which supports
-    // concatenation along an arbitrary static dimension for any rank.
-    if (rank >= 2) {
-      rewriter.replaceOpWithNewOp<tensor::ConcatOp>(op, resType, dim,
-                                                    ValueRange{lhs, rhs});
-      return success();
-    }
-
-    // 1D tensors: build the result via tensor.empty + a sequence of
-    // tensor.insert_slice, placing lhs then rhs back-to-back along `dim`.
-    auto emptyOp = rewriter.create<tensor::EmptyOp>(loc, resType.getShape(),
-                                                    resType.getElementType());
-
-    SmallVector<OpFoldResult> offsets(rank, rewriter.getIndexAttr(0));
-    SmallVector<OpFoldResult> strides(rank, rewriter.getIndexAttr(1));
-
-    SmallVector<OpFoldResult> lhsSizes =
-        llvm::map_to_vector(lhsType.getShape(), [&](int64_t t) {
-          return OpFoldResult(rewriter.getIndexAttr(t));
-        });
-    SmallVector<OpFoldResult> rhsSizes =
-        llvm::map_to_vector(rhsType.getShape(), [&](int64_t t) {
-          return OpFoldResult(rewriter.getIndexAttr(t));
-        });
-
-    auto insertLhs = rewriter.create<tensor::InsertSliceOp>(
-        loc, lhs, emptyOp, offsets, lhsSizes, strides);
-
-    offsets[dim] = rewriter.getIndexAttr(lhsType.getShape()[dim]);
-    auto insertRhs = rewriter.create<tensor::InsertSliceOp>(
-        loc, rhs, insertLhs, offsets, rhsSizes, strides);
-
-    rewriter.replaceOp(op, insertRhs.getResult());
     return success();
   }
 };
@@ -1356,14 +1302,14 @@ struct FoldStagingCopyPattern : public OpRewritePattern<memref::CopyOp> {
 };
 
 // =============================================================================
-// tv.ptr signature legalization
+// view base pointer signature legalization
 // =============================================================================
 
-// Convert a tv.ptr<T> kernel base pointer to memref<?xT, GM> (a ranked pointee
-// keeps its shape; otherwise a dynamic 1-D memref). The GM address space is
-// preserved so the downstream lowering sees a global-memory buffer.
-static MemRefType convertTvPtrToMemRef(tv::PtrType ptrTy) {
-  auto pointeeTy = ptrTy.getPointeeType();
+// Convert a view base pointer to memref<?xT, GM> (a ranked pointee keeps its
+// shape; otherwise a dynamic 1-D memref). The GM address space is preserved so
+// the downstream lowering sees a global-memory buffer.
+static MemRefType convertPtrToMemRef(Type ptrTy) {
+  auto pointeeTy = tv::getPtrPointeeType(ptrTy);
   auto *ctx = pointeeTy.getContext();
   auto gmSpace = hivm::AddressSpaceAttr::get(ctx, hivm::AddressSpace::GM);
   if (auto rankedTy = dyn_cast<RankedTensorType>(pointeeTy))
@@ -1373,48 +1319,87 @@ static MemRefType convertTvPtrToMemRef(tv::PtrType ptrTy) {
                          MemRefLayoutAttrInterface{}, gmSpace);
 }
 
-// Rewrite every tv.ptr<T> kernel argument of \p func to memref<?xT, GM>. Each
-// retyped entry-block argument is bridged back to its original tv.ptr type with
-// an unrealized_conversion_cast so that ops still consuming the base pointer
-// (make_tensor_view) keep verifying; the CommonIR-to-HIVM lowering recovers the
-// memref through that cast. The base pointer materialized by
-// convertToTensorViewPtr enters the pipeline as tv.ptr, so legalizing it here
-// keeps the tv.ptr type from leaking into the lowering.
-static void legalizeTvPtrSignature(triton::FuncOp func) {
-  auto funcType = func.getFunctionType();
-  bool changed = false;
+// Whether \p arg is a pointer this pass should convert: every use has to be a
+// view construction. Deciding here rather than in the frontend builder is what
+// makes the check sound: the whole body is already built, so the uses are all
+// visible.
+//
+// A pointer that also feeds ordinary pointer arithmetic is left alone, and the
+// mixed case consequently does not compile. Converting it was measured and is
+// not the fix: the entry argument becomes a GM memref bridged back with an
+// unrealized cast, which reads correctly after this pass, but the cast does not
+// survive for the arithmetic users -- `tt.splat` ends up back on a bare
+// `tt.ptr` and TritonToUnstructure fails. Not converting instead leaves
+// `traceView` to bridge `tt.ptr` to memref at the point of use, which
+// TritonToLinalg reports as a live materialization. Both directions fail, so
+// supporting mixed use means giving the view its own buffer without retyping
+// the argument.
+static bool isExclusiveViewBasePtr(BlockArgument arg) {
+  if (!isa<triton::PointerType>(arg.getType()))
+    return false;
+  if (arg.use_empty())
+    return false;
+  return llvm::all_of(arg.getUsers(), [](Operation *user) {
+    return isa<tv::MakeTensorViewOp>(user);
+  });
+}
 
-  SmallVector<Type> newInputs;
-  for (auto ty : funcType.getInputs()) {
-    if (auto tvPtrTy = dyn_cast<tv::PtrType>(ty)) {
-      newInputs.push_back(convertTvPtrToMemRef(tvPtrTy));
-      changed = true;
-    } else {
-      newInputs.push_back(ty);
-    }
-  }
-
-  if (!changed)
-    return;
-
-  func.setFunctionType(FunctionType::get(func.getContext(), newInputs,
-                                         funcType.getResults()));
-
+// Rewrite each kernel argument of \p func that only feeds view constructions to
+// memref<?xT, GM>. The retyped entry-block argument is bridged back to its
+// original pointer type with an unrealized_conversion_cast so that the
+// make_tensor_view ops still consuming it keep verifying; the CommonIR-to-HIVM
+// lowering recovers the memref through that cast.
+//
+// Without this the cast runs the other way: `getAsMemRef` would bridge a
+// `tt.ptr` argument to a memref at the point of use, and nothing downstream
+// resolves that direction -- TritonToLinalg reports the materialization as
+// still live. Converting the argument itself is what gives the view a GM
+// buffer.
+static LogicalResult legalizeViewBasePtrSignature(triton::FuncOp func,
+                                                  ModuleOp module) {
   if (func.empty())
-    return;
+    return success();
 
   Block &entry = func.front();
-  OpBuilder builder(&entry, entry.begin());
-  for (unsigned i = 0; i < entry.getNumArguments(); ++i) {
-    BlockArgument arg = entry.getArgument(i);
-    auto tvPtrTy = dyn_cast<tv::PtrType>(arg.getType());
-    if (!tvPtrTy)
+  SmallVector<Type> newInputs(func.getFunctionType().getInputs());
+  SmallVector<BlockArgument> toConvert;
+  for (BlockArgument arg : entry.getArguments()) {
+    if (!isExclusiveViewBasePtr(arg))
       continue;
-    arg.setType(convertTvPtrToMemRef(tvPtrTy));
-    auto cast = builder.create<UnrealizedConversionCastOp>(func.getLoc(),
-                                                           tvPtrTy, arg);
+    toConvert.push_back(arg);
+    newInputs[arg.getArgNumber()] = convertPtrToMemRef(arg.getType());
+  }
+
+  if (toConvert.empty())
+    return success();
+
+  // Changing the signature would break any tt.call that targets this function:
+  // the call operands keep their pointer type and no longer match. Converting
+  // them here is not a fix either -- a cast from the caller's pointer to a
+  // memref is the direction nothing downstream resolves. Entry kernels have no
+  // callers, and an inlinable callee is already gone by this point, so the
+  // remaining case is a noinline helper that builds a view on its own pointer
+  // parameter. Report that instead of emitting a module that fails to verify.
+  if (!SymbolTable::symbolKnownUseEmpty(func, module))
+    return func.emitError()
+           << "cannot legalize view base pointer arguments of '"
+           << func.getName()
+           << "': the function is called, and its call sites would keep the "
+              "original pointer type. Allow this helper to be inlined (drop "
+              "`noinline`) or build the view in the caller";
+
+  func.setFunctionType(FunctionType::get(func.getContext(), newInputs,
+                                         func.getFunctionType().getResults()));
+
+  OpBuilder builder(&entry, entry.begin());
+  for (BlockArgument arg : toConvert) {
+    Type origTy = arg.getType();
+    arg.setType(newInputs[arg.getArgNumber()]);
+    auto cast =
+        builder.create<UnrealizedConversionCastOp>(func.getLoc(), origTy, arg);
     arg.replaceAllUsesExcept(cast.getResult(0), cast);
   }
+  return success();
 }
 
 namespace {
@@ -1422,8 +1407,14 @@ struct CommonIRTvPtrLegalizePass
     : public mlir::triton::impl::CommonIRTvPtrLegalizeBase<
           CommonIRTvPtrLegalizePass> {
   void runOnOperation() override {
-    getOperation().walk(
-        [](triton::FuncOp func) { legalizeTvPtrSignature(func); });
+    ModuleOp module = getOperation();
+    auto result = module.walk([&](triton::FuncOp func) {
+      return failed(legalizeViewBasePtrSignature(func, module))
+                 ? WalkResult::interrupt()
+                 : WalkResult::advance();
+    });
+    if (result.wasInterrupted())
+      signalPassFailure();
   }
 };
 } // namespace
@@ -1474,7 +1465,6 @@ void CommonIRToHIVMPass::runOnOperation() {
   APPLY_REWRITE_PATTERN(TilePipeBarrierToHIVM);
   APPLY_REWRITE_PATTERN(TileCubeWaitToHIVM);
   APPLY_REWRITE_PATTERN(TileGmOffsetToHIVM);
-  APPLY_REWRITE_PATTERN(TileConcatToHIVM);
 
   // Step N: After all tile ops are lowered, convert !tile.buf types remaining
   // in tt.func signatures and tt.call ops (these arise when tile.alloc results

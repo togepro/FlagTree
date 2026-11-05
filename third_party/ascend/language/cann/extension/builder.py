@@ -112,5 +112,13 @@ def setup_unified_builder(main_builder, ascend_builder):
         'create_flip',
         'create_tanh',
         'create_annotation',
+        # TensorView / CommonIR
+        'create_tensor_view',
+        'create_partition_view',
+        'create_strided_view',
+        'create_gather_scatter_view',
+        'get_tensor_view_ty',
+        'create_tile_load',
+        'create_tile_store',
     ]
     attach_builder_methods(main_builder, ascend_builder, ascend_methods)

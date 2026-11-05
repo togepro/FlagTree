@@ -162,7 +162,8 @@ SmallVector<Value> emitLeadingMasks(OpBuilder &b, Location loc,
 /// GatherScatterView has traversal == tile > 0, so a negative block index
 /// makes the entire dimension invalid and yields zero length. Otherwise the
 /// valid region is the prefix [0, max(0, min(extent - origin, tile))).
-/// This depends only on the scalar block index and base extent, not loop coords.
+/// This depends only on the scalar block index and base extent, not loop
+/// coords.
 Value emitDenseValidLength(OpBuilder &b, Location loc,
                            const TensorViewAccessInfo &info, ValueRange indices,
                            unsigned dim) {
@@ -184,8 +185,8 @@ Value emitDenseValidLength(OpBuilder &b, Location loc,
 /// sparse dims retain the full tile size and use separate bounds masks.
 /// Leading sizes become loop upper bounds; payload sizes become DMA sizes.
 SmallVector<Value> emitClippedTileSizes(OpBuilder &b, Location loc,
-                                       const TensorViewAccessInfo &info,
-                                       ValueRange indices) {
+                                        const TensorViewAccessInfo &info,
+                                        ValueRange indices) {
   SmallVector<Value> sizes;
   for (unsigned d = 0; d < info.rank(); ++d) {
     if (llvm::is_contained(info.sparseDims, static_cast<int64_t>(d)))
@@ -329,7 +330,8 @@ LogicalResult emitScalarScatter(OpBuilder &b, Location loc,
         Value elemView = emitGmElementView(nested, nestedLoc, info.base,
                                            access.physOffset, info.elementType);
         // Keep tensor materialization for scalar GM writes: plain memref.store
-        // into this element view has silently dropped lanes on the Ascend backend.
+        // into this element view has silently dropped lanes on the Ascend
+        // backend.
         Value empty = nested.create<tensor::EmptyOp>(
             nestedLoc, ArrayRef<int64_t>{1}, info.elementType);
         Value inserted = nested.create<tensor::InsertOp>(

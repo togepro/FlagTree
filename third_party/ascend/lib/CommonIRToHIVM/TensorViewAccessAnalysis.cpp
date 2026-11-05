@@ -161,7 +161,7 @@ analyzeDenseIntegerConstant(Value value, DenseIntElementsAttr dense) {
 }
 
 static IndexPatternInfo analyzeIndexProducerImpl(Value value,
-                                                   unsigned depth = 0) {
+                                                 unsigned depth = 0) {
   if (!value || depth > 16)
     return makeStepPattern(value, std::nullopt);
 
@@ -374,9 +374,7 @@ analyzeDensePayload(const TensorViewAccessInfo &view) {
 
 namespace {
 
-void printIndent(llvm::raw_ostream &os, unsigned indent) {
-  os.indent(indent);
-}
+void printIndent(llvm::raw_ostream &os, unsigned indent) { os.indent(indent); }
 
 /// `-1` is the "unknown" sentinel for byte sizes and access counts.
 void printCount(llvm::raw_ostream &os, int64_t value) {
@@ -413,9 +411,9 @@ void printList(llvm::raw_ostream &os, const RangeT &range) {
   os << "]";
 }
 
-/// Shared by every toString() below: print into a string via raw_string_ostream.
-template <typename FnT>
-std::string captureToString(FnT &&emit) {
+/// Shared by every toString() below: print into a string via
+/// raw_string_ostream.
+template <typename FnT> std::string captureToString(FnT &&emit) {
   std::string buffer;
   llvm::raw_string_ostream os(buffer);
   emit(os);
@@ -425,7 +423,7 @@ std::string captureToString(FnT &&emit) {
 } // namespace
 
 void IndexPatternInfo::print(llvm::raw_ostream &os, unsigned indent,
-                               bool multiline) const {
+                             bool multiline) const {
   if (!multiline) {
     printIndent(os, indent);
     os << "dim" << viewDim << ": " << stringifyIndexPatternKind(kind)
@@ -464,9 +462,8 @@ void IndexPatternInfo::print(llvm::raw_ostream &os, unsigned indent,
 }
 
 std::string IndexPatternInfo::toString(bool multiline) const {
-  return captureToString([&](llvm::raw_ostream &os) {
-    print(os, /*indent=*/0, multiline);
-  });
+  return captureToString(
+      [&](llvm::raw_ostream &os) { print(os, /*indent=*/0, multiline); });
 }
 
 void IndexPatternInfo::dump() const {
@@ -518,8 +515,7 @@ std::string DensePayloadInfo::toString() const {
 
 void DensePayloadInfo::dump() const { print(llvm::errs()); }
 
-void TensorViewAccessInfo::print(llvm::raw_ostream &os,
-                                  unsigned indent) const {
+void TensorViewAccessInfo::print(llvm::raw_ostream &os, unsigned indent) const {
   printIndent(os, indent);
   os << "TensorView:\n";
   printIndent(os, indent + 2);

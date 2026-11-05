@@ -48,17 +48,17 @@ inline Value asIndexValue(OpBuilder &builder, Location loc, Value value) {
 
 /// Build a memref type with the requested HIVM address space.
 inline MemRefType makeSpaceMemref(MLIRContext *ctx, ArrayRef<int64_t> shape,
-                                 Type elementType, hivm::AddressSpace space) {
+                                  Type elementType, hivm::AddressSpace space) {
   auto spaceAttr = hivm::AddressSpaceAttr::get(ctx, space);
   return MemRefType::get(shape, elementType, MemRefLayoutAttrInterface{},
-                        spaceAttr);
+                         spaceAttr);
 }
 
 /// Create a single-element GM view at a dynamic flat element offset.
 inline Value emitGmElementView(OpBuilder &b, Location loc, Value base,
                                Value offset, Type elementType) {
   auto layout = StridedLayoutAttr::get(b.getContext(),
-                                     /*offset=*/ShapedType::kDynamic, {1});
+                                       /*offset=*/ShapedType::kDynamic, {1});
   auto gmSpace =
       hivm::AddressSpaceAttr::get(b.getContext(), hivm::AddressSpace::GM);
   auto ty = MemRefType::get({1}, elementType, layout, gmSpace);
@@ -70,4 +70,4 @@ inline Value emitGmElementView(OpBuilder &b, Location loc, Value base,
 
 } // namespace triton
 } // namespace mlir
-#endif  // COMMONIR_TO_HIVM_UTILS_H
+#endif // COMMONIR_TO_HIVM_UTILS_H

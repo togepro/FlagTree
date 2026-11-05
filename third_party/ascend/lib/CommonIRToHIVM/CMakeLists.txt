@@ -1,5 +1,6 @@
 add_triton_library(CommonIRToHIVM
   CommonIRToHIVM.cpp
+  ReduceSumStrengthPass.cpp
   TensorViewAccessAnalysis.cpp
   TensorViewStrategy.cpp
   TensorViewLowering.cpp
