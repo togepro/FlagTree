@@ -529,14 +529,19 @@ def linalg_to_bc_by_triton_mlir_opt(linalg: str, metadata, opt):
 
         triton_mlir_opt_path = _get_triton_mlir_opt_path()
 
-        # The --emit-bytecode flag ensures output is in BC format
-        subprocess.run([
+        # The --emit-bytecode flag ensures output is in BC format.
+        # Override the emitted bytecode version for compatibility testing with
+        # older bishengir-opt builds, e.g. TRITON_ASCEND_MLIRBC_VERSION=5.
+        cmd = [
             triton_mlir_opt_path,
             ttadapter_path,
             "--emit-bytecode",
-            "-o",
-            bc_path,
-        ], check=True, capture_output=True, text=True)
+        ]
+        bytecode_version = os.getenv("TRITON_ASCEND_MLIRBC_VERSION")
+        if bytecode_version:
+            cmd.append(f"--emit-bytecode-version={bytecode_version}")
+        cmd += ["-o", bc_path]
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
 
         # Read bytecode as binary before temp directory is cleaned up
         with open(bc_path, "rb") as f:
@@ -1431,9 +1436,7 @@ class NPUOptions:
     simt_reorder_instruction: bool = field(default=False, init=False)
     storage_align: Optional[bool] = field(default=None, init=False)
     stream: Optional[int] = field(default=None, init=False)
-    # MLIR bytecode produced by triton-mlir-opt (MLIR 22) is not compatible
-    # with the bishengir-opt shipped in CANN 9.2.1. Use the text pipeline.
-    use_bytecode: bool = field(default=False, init=False)
+    use_bytecode: bool = field(default=True, init=False)
 
     def __post_init__(self, arch, rule_mask):
         from triton.backends.ascend import _apply_ascend_patch
@@ -1706,9 +1709,9 @@ class AscendBackend(BaseBackend):
                 stages["npubin"] = (lambda src, metadata: ttir_to_npubin(src, metadata, options))
                 return
             stages["ttadapter"] = lambda src, metadata: ttir_to_linalg(src, metadata, options)
-            if options.use_bytecode:
-                stages["mlirbc"] = lambda src, metadata: linalg_to_bc_by_triton_mlir_opt(src, metadata, options)
-                stages["bcmlir"] = lambda src, metadata: bc_to_linalg_by_bishengir_opt(src, metadata, options)
+            # Normal kernels convert Linalg IR to bytecode and back to MLIR text.
+            stages["mlirbc"] = lambda src, metadata: linalg_to_bc_by_triton_mlir_opt(src, metadata, options)
+            stages["bcmlir"] = lambda src, metadata: bc_to_linalg_by_bishengir_opt(src, metadata, options)
             if options.compile_on_910_95:
                 stages["npubin"] = (
                     lambda src, metadata: linalg_to_bin_enable_npu_compile_910_95(src, metadata, options))
@@ -1723,7 +1726,11 @@ class AscendBackend(BaseBackend):
     @functools.lru_cache()
     def hash(self):
         # TODO fetch compiler version
-        version_key = (self.target, _get_libdevice_compile_state(self.target.arch))
+        version_key = (
+            self.target,
+            _get_libdevice_compile_state(self.target.arch),
+            os.getenv("TRITON_ASCEND_MLIRBC_VERSION", ""),
+        )
         return str(version_key)
 
     @classmethod
