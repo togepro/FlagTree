@@ -157,5 +157,7 @@ third_party/tsingmicro/backend/bin/
 third_party/tsingmicro/backend/lib/
 third_party/flir
 third_party/ascend/AscendNPU-IR
+python/triton/_C/triton-mlir-opt
+python/triton/_C/triton-opt
 tsingmicro_launch.log
 python/tsingmicro_launch.log
