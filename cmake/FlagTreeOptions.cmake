@@ -45,10 +45,6 @@ macro(flagtree_configure_options)
     set(FLAGCX_ENABLED ON)
   endif()
 
-  # TLE DSA (ascend-only) needs the third_party/tle/dsa subtree, which this
-  # branch does not carry; keep it an explicit opt-in.
-  set(FLAGTREE_TLE_DSA "$ENV{FLAGTREE_TLE_DSA}")
-
   set(FLAGTREE_TLE ON)
   if(FLAGTREE_BACKEND STREQUAL "xpu")
     set(FLAGTREE_TLE OFF)
@@ -89,39 +85,18 @@ macro(flagtree_configure_options)
   elseif(FLAGTREE_BACKEND STREQUAL "ascend")
     set(CMAKE_C_COMPILER clang)
     set(CMAKE_CXX_COMPILER clang++)
-    # The ascend backend consumes FLIR's incubated passes (TritonToLinalgIncubated).
-    set(FLIR_BUILD_INCUBATED ON CACHE BOOL "Build FLIR incubated passes" FORCE)
-    # AscendNPU-IR gates its sources on the LLVM major version. cmake/llvm-hash.txt
-    # pins LLVM 22 here.
-    #
-    # Deliberately leave LLVM_MAJOR_VERSION_21_COMPATIBLE unset: the ascend
-    # CMakeLists uses it to opt into linking MLIRMeshDialect, but LLVM 22
-    # renamed that dialect to Shard (only libMLIRShardDialect.a ships in the
-    # pinned package), so turning it on would reference a missing target.
-    set(LLVM_MAJOR_VERSION_22_OR_HIGHER ON)
+    # The upstream triton-ascend 3.6 backend does not consume FlagTree's TLE
+    # dialect. CommonIR/TLE/FLIR Ascend features are layered on separately.
+    set(FLAGTREE_TLE OFF)
+    remove_definitions(-D__TLE__)
+    list(REMOVE_ITEM LLVM_TABLEGEN_FLAGS -D__TLE__)
+    add_definitions(-DTRITON_USE_ASCEND=1)
+    # Upstream triton-ascend 3.6 targets LLVM 22 API changes (notably the
+    # removal of mlir::CopyOpInterface). AscendNPU-IR checks both macros; the
+    # Ascend and FLIR subdirectories apply them locally so core Triton does not
+    # need to rebuild.
     set(LLVM_MAJOR_VERSION_22_COMPATIBLE ON CACHE BOOL
-        "AscendNPU-IR build with llvm major version 22 or later" FORCE)
-    add_definitions(-D__LLVM_MAJOR_VERSION_22_COMPATIBLE__)
-    add_compile_options("-Wno-deprecated-declarations")
-    add_compile_options("-Wno-error=deprecated-declarations")
-    # TLE DSA is an opt-in extension requiring the third_party/tle/dsa subtree,
-    # which this branch does not carry. The ascend C++ sources guard every use
-    # of it with #ifdef __TLE_DSA__, so leaving this off compiles those paths
-    # out and drops the corresponding CMake dependencies.
-    if(FLAGTREE_TLE_DSA)
-      if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/tle/dsa/CMakeLists.txt")
-        message(FATAL_ERROR "FLAGTREE_TLE_DSA requires third_party/tle/dsa")
-      endif()
-      add_definitions(-D__TLE_DSA__)
-    endif()
-    # AscendNPU-IR: build only the standalone IR, and keep it out of the
-    # backend's own CMakeLists so the subdirectory is added exactly once.
-    set(BISHENGIR_ENABLE_A5_UNPUBLISHED_FEATURES ON)
-    set(BISHENGIR_BUILD_STANDALONE_IR_ONLY ON)
-    set(ASCENDNPU_IR_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ascend/AscendNPU-IR)
-    set(ASCENDNPU_IR_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/third_party/ascend/AscendNPU-IR)
-    include_directories(${ASCENDNPU_IR_SRC_DIR}/bishengir/include)
-    include_directories(${ASCENDNPU_IR_BINARY_DIR}/bishengir/include)
+        "AscendNPU-IR build with LLVM 22 API compatibility" FORCE)
   elseif(FLAGTREE_BACKEND STREQUAL "tsingmicro")
     set(CMAKE_C_COMPILER clang)
     set(CMAKE_CXX_COMPILER clang++)
@@ -233,7 +208,9 @@ macro(flagtree_include_directories root_include_dir)
     # include_directories(BEFORE ...) to ensure XPU targets pick up the XPU
     # versions first. Other backends provide superset headers and do not need
     # this.
-    if(FLAGTREE_BACKEND STREQUAL "xpu")
+    # Ascend's third_party/ascend/include contains only backend pass headers,
+    # not a superset of the core Triton headers.
+    if(FLAGTREE_BACKEND STREQUAL "xpu" OR FLAGTREE_BACKEND STREQUAL "ascend")
       include_directories("${root_include_dir}")
     endif()
     include_directories(${BACKEND_INCLUDE_DIR})
@@ -256,6 +233,12 @@ macro(flagtree_configure_backend_cxx_flags)
   elseif(FLAGTREE_BACKEND STREQUAL "mthreads")
     set(CMAKE_CXX_FLAGS
       "${CMAKE_CXX_FLAGS} -Wno-covered-switch-default")
+  elseif(FLAGTREE_BACKEND STREQUAL "ascend")
+    # The vendored triton-ascend 3.6 sources are not warning-clean under the
+    # FlagTree toolchain (LLVM 22 / clang 22). Keep warnings visible but do not
+    # fail the port build on them.
+    set(CMAKE_CXX_FLAGS
+      "${CMAKE_CXX_FLAGS} -Wno-error -Wno-deprecated-declarations -Wno-attributes -Wno-comment")
   else()
     set(CMAKE_CXX_FLAGS
       "${CMAKE_CXX_FLAGS} -Werror -Wno-covered-switch-default")
@@ -270,10 +253,10 @@ macro(flagtree_configure_core_source)
   endif()
 
   if(FLAGTREE_BACKEND MATCHES
-     "^(xpu|cambricon|aipu|tsingmicro|enflame|rpu|thrive|metax|tileir|ppu|spacemit|sunrise)$")
+     "^(xpu|cambricon|aipu|tsingmicro|enflame|rpu|thrive|metax|tileir|ppu|spacemit|sunrise|ascend)$")
     include_directories(${PROJECT_SOURCE_DIR}/include)
     include_directories(${PROJECT_BINARY_DIR}/include) # Tablegen'd files
-    if(FLAGTREE_BACKEND STREQUAL "xpu")
+    if(FLAGTREE_BACKEND MATCHES "^(xpu|ascend)$")
       include_directories(${PROJECT_SOURCE_DIR}/third_party/nvidia/include)
       include_directories(${PROJECT_BINARY_DIR}/third_party/nvidia/include) # Tablegen'd files
       add_subdirectory(third_party/nvidia/include)
@@ -283,7 +266,7 @@ macro(flagtree_configure_core_source)
     endif()
     add_subdirectory(include)
     add_subdirectory(lib)
-    if(FLAGTREE_BACKEND STREQUAL "xpu")
+    if(FLAGTREE_BACKEND MATCHES "^(xpu|ascend)$")
       add_subdirectory(third_party/nvidia/lib/Dialect/NVGPU/IR)
       add_subdirectory(third_party/nvidia/lib/Dialect/NVWS/IR)
       add_subdirectory(third_party/nvidia/lib/Dialect/NVWS/Transforms)
@@ -368,12 +351,11 @@ macro(flagtree_configure_flir_dependency)
     add_subdirectory(third_party/flir/lib/Dialect/CommonIR)
   endif()
 
-  if(FLAGTREE_BACKEND MATCHES "^(tsingmicro|ascend)$")
+  if(FLAGTREE_BACKEND STREQUAL "tsingmicro")
     if(NOT EXISTS "${PROJECT_SOURCE_DIR}/third_party/flir/CMakeLists.txt")
       message(FATAL_ERROR "The ${FLAGTREE_BACKEND} backend requires third_party/flir")
     endif()
 
-    # These backends only consume FLIR's C++ targets; do not build its Python/CPU plugin.
     set(TRITON_SHARED_BUILD_CPU_BACKEND OFF)
     list(REMOVE_ITEM TRITON_CODEGEN_BACKENDS "flir")
     if(NOT TARGET TritonSharedUtils)
@@ -382,21 +364,32 @@ macro(flagtree_configure_flir_dependency)
         "${PROJECT_BINARY_DIR}/third_party/flir"
       )
     endif()
-  endif()
-endmacro()
-
-
-# AscendNPU-IR provides the BiShengIR dialects the ascend backend links against.
-# Added from the top level (not from the backend's own CMakeLists) so the source
-# directory is only ever associated with one binary directory.
-macro(flagtree_configure_ascend_npu_ir_dependency)
-  if(FLAGTREE_BACKEND STREQUAL "ascend")
-    if(NOT EXISTS "${ASCENDNPU_IR_SRC_DIR}/CMakeLists.txt")
-      message(FATAL_ERROR
-        "The ascend backend requires AscendNPU-IR at ${ASCENDNPU_IR_SRC_DIR}. "
-        "Run the Python package build to download third-party dependencies.")
+  elseif(FLAGTREE_BACKEND STREQUAL "ascend")
+    if(NOT EXISTS "${PROJECT_SOURCE_DIR}/third_party/flir/CMakeLists.txt")
+      message(FATAL_ERROR "The ascend backend requires third_party/flir")
     endif()
-    add_subdirectory(${ASCENDNPU_IR_SRC_DIR} ${ASCENDNPU_IR_BINARY_DIR})
+
+    # Ascend consumes only FLIR's CommonIR/TensorView surface. Adding the
+    # full FLIR tree would create duplicate targets such as TritonToLinalg,
+    # TritonToStructured and DiscreteMaskAccessConversion that already exist
+    # in third_party/ascend.
+    add_definitions(-D__LLVM_MAJOR_VERSION_21_COMPATIBLE__)
+    add_definitions(-D__LLVM_MAJOR_VERSION_22_COMPATIBLE__)
+    include_directories("${PROJECT_SOURCE_DIR}/third_party/flir/include")
+    include_directories("${PROJECT_BINARY_DIR}/third_party/flir/include")
+
+    add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/flir/include/mlir-ext/Dialect/CommonIR"
+                     "${PROJECT_BINARY_DIR}/third_party/flir/include/mlir-ext/Dialect/CommonIR")
+    add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/flir/lib/Dialect/CommonIR/IR"
+                     "${PROJECT_BINARY_DIR}/third_party/flir/lib/Dialect/CommonIR/IR")
+    add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/flir/include/triton-shared/Dialect/TensorView"
+                     "${PROJECT_BINARY_DIR}/third_party/flir/include/triton-shared/Dialect/TensorView")
+    add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/flir/lib/Dialect/TensorView/IR"
+                     "${PROJECT_BINARY_DIR}/third_party/flir/lib/Dialect/TensorView/IR")
+    add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/flir/include/triton-shared/Conversion/TensorViewLowering"
+                     "${PROJECT_BINARY_DIR}/third_party/flir/include/triton-shared/Conversion/TensorViewLowering")
+    add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/flir/lib/Conversion/TensorViewLowering"
+                     "${PROJECT_BINARY_DIR}/third_party/flir/lib/Conversion/TensorViewLowering")
   endif()
 endmacro()
 
@@ -595,6 +588,18 @@ macro(flagtree_configure_backend_libraries)
       pybind11::headers
 
     )
+  elseif(FLAGTREE_BACKEND STREQUAL "ascend")
+    list(APPEND TRITON_LIBRARIES
+      TritonNVIDIACompat
+      MLIRFuncInlinerExtension
+      MLIRBufferizationDialect
+      MLIRMemRefDialect
+      MLIRLinalgDialect
+      MLIRTensorDialect
+      MLIRFuncDialect
+      MLIRSCFTransforms
+      MLIRLinalgTransforms
+    )
   elseif(FLAGTREE_BACKEND STREQUAL "metax" AND BUILD_MCTLE)
     list(APPEND TRITON_LIBRARIES MLIRTargetLLVMIRImport)
   endif()
@@ -629,12 +634,6 @@ macro(flagtree_configure_tools_and_tests)
     if(FLAGTREE_TLE)
       flagtree_add_tle_generated_header_dependencies()
     endif()
-    add_subdirectory(test)
-  elseif(FLAGTREE_BACKEND STREQUAL "ascend")
-    # The ascend backend adds its own bin/ (third_party/ascend/CMakeLists.txt),
-    # whose tools link TritonTestAnalysis/TritonTestDialect from test/lib.
-    # Add test/ so those libraries get defined; bin/ is not added here because
-    # the backend supplies its own.
     add_subdirectory(test)
   elseif(FLAGTREE_BACKEND STREQUAL "iluvatar")
     option(FLAGTREE_ILUVATAR_BUILD_BIN
@@ -744,17 +743,25 @@ macro(flagtree_added_python_src)
   endforeach()
   add_library(triton SHARED ${_flagtree_python_sources})
 
-  if(FLAGTREE_BACKEND STREQUAL "ascend")
-    # third_party/ascend/python/src/main.cc registers the buffer_ir submodule,
-    # so its implementation must be part of the triton module.
-    target_sources(triton PRIVATE
-      ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ascend/python/triton/extension/buffer/src/buffer_ir.cc)
-  endif()
-
   if(FLAGTREE_BACKEND STREQUAL "xpu")
     target_sources(triton PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xpu/python/src/mlir_pass_abi_shim.cc)
     add_dependencies(triton TritonAMDGPUTableGen TritonAMDGPUAttrDefsIncGen)
     target_link_libraries(triton PRIVATE TritonAMDGPUIR TritonAMDUtils)
+  elseif(FLAGTREE_BACKEND STREQUAL "ascend")
+    # python/src/passes.cc includes TritonGPU passes that reference NVWS / NVGPU
+    # headers generated by the in-tree NVIDIA/AMD header subdirectories.
+    foreach(_flagtree_generated_dep IN ITEMS
+        TritonTableGen
+        NVGPUTableGen
+        NVGPUAttrDefsIncGen
+        NVWSTableGen
+        NVWSAttrDefsIncGen
+        TritonAMDGPUTableGen
+        TritonAMDGPUAttrDefsIncGen)
+      if(TARGET ${_flagtree_generated_dep})
+        add_dependencies(triton ${_flagtree_generated_dep})
+      endif()
+    endforeach()
   endif()
 endmacro()
 

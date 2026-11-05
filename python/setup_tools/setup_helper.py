@@ -68,8 +68,7 @@ def get_long_description():
 
 def init_backends(backend_installer):
     if flagtree_backend:
-        if flagtree_backend in ("aipu", "tsingmicro", "enflame", "rpu", "thrive", "sunrise", "tileir", "ppu", "amd",
-                                "ascend"):
+        if flagtree_backend in ("aipu", "tsingmicro", "enflame", "rpu", "thrive", "sunrise", "tileir", "ppu", "amd"):
             backends = [
                 *backend_installer.copy(configs.default_backends + tuple(configs.extend_backends)),
                 *backend_installer.copy_externals(),
@@ -889,12 +888,12 @@ else:
 
 cache = FlagTreeCache()
 
-download_flagtree_third_party("flir", condition=(flagtree_backend in ("tsingmicro", "ascend")), required=True)
-
-# The ascend backend links the BiShengIR dialects built from AscendNPU-IR.
 if flagtree_backend == "ascend":
-    configs.activated_module.warn_stale_ascend_npu_ir_checkout(utils.flagtree_submodules["AscendNPU-IR"])
-    download_flagtree_third_party("AscendNPU-IR", condition=True, required=True)
+    _ascend_precompile = get_hook_instance("precompile_hook_ascend")
+    if _ascend_precompile:
+        _ascend_precompile(configs=configs, cache=cache)
+
+download_flagtree_third_party("flir", condition=(flagtree_backend in ("tsingmicro", "ascend")), required=True)
 '''
    FlagCX is a third-party library adopted by the tle distributed system,
    refer to https://github.com/flagos-ai/FlagCX
@@ -910,6 +909,8 @@ download_flagtree_third_party("flagcx", condition=not flagcx_wheel
                               required=True)
 
 download_flagtree_third_party("cuda-tile", condition=(flagtree_backend == "tileir"), required=True)
+
+download_flagtree_third_party("AscendNPU-IR", condition=(flagtree_backend == "ascend"), required=True)
 
 handle_flagtree_backend()
 

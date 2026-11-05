@@ -28,6 +28,18 @@
 
 include "mlir/Pass/PassBase.td"
 
+def CommonIRTvPtrLegalize
+    : Pass<"commonir-tv-ptr-legalize", "mlir::ModuleOp"> {
+  let summary = "Legalize tv.ptr kernel arguments to memref<?xT, GM>";
+  let constructor = "triton::createCommonIRTvPtrLegalizePass()";
+  let dependentDialects = [
+    "hivm::HIVMDialect",
+    "mlir::memref::MemRefDialect",
+    "mlir::triton::tv::TensorViewDialect",
+    "mlir::triton::TritonDialect",
+  ];
+}
+
 def CommonIRToHIVM : Pass<"commonir-to-hivm", "mlir::ModuleOp"> {
   let summary = "Convert CommonIR dialect to HIVM dialect";
   let constructor = "triton::createCommonIRToHIVMPass()";
@@ -38,28 +50,6 @@ def CommonIRToHIVM : Pass<"commonir-to-hivm", "mlir::ModuleOp"> {
     "mlir::memref::MemRefDialect",
     "mlir::tensor::TensorDialect",
     "mlir::triton::TritonDialect",
-  ];
-}
-
-def ReduceSumStrength : Pass<"reduce-sum-strength", "mlir::ModuleOp"> {
-  let summary = "Reduce sum strength for profitable tl.sum-style add reductions";
-  let description = [{
-      This pass rewrites profitable add reductions by pre-adding two equal halves
-      of the reduced dimension and reducing the half-sized tensor. It is owned by
-      the Ascend ttir-to-ttadapter pipeline for backends where a full-width reduction
-      is more expensive than an elementwise add plus a smaller reduction.
-  }];
-  let constructor = "triton::createReduceSumStrengthPass()";
-
-  let dependentDialects = ["mlir::arith::ArithDialect",
-                           "mlir::tensor::TensorDialect",
-                           "mlir::triton::TritonDialect"];
-
-  let options = [
-      Option<"enable", "enable", "bool", /*default*/"true",
-             "Enable the rewrite">,
-      Option<"splitFactor", "split-factor", "int32_t", /*default*/"2",
-             "Reduction-axis split factor; currently only 2 is supported">
   ];
 }
 

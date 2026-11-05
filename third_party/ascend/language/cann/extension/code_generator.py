@@ -35,11 +35,9 @@ def mangle_ty(ty):
     # Lazy imports to avoid circular dependencies at module import time.
     from triton import language
     from triton.extension.buffer.language import core as bl
-    # commonir: TLE buffer types use the same mangle format as extension buffers.
-    from triton.experimental.tle.language.dsa.types import buffer_type as tle_buffer_type
 
     # Buffer types are Python-side dtypes; handle them first.
-    if isinstance(ty, (bl.buffer_type, tle_buffer_type)):
+    if isinstance(ty, bl.buffer_type):
         elt = mangle_ty(ty.element_ty)
         shape = "_".join(map(str, ty.shape))
         return f"B{elt}S{shape}S"
@@ -106,6 +104,9 @@ def _build_mlir_attrs_from_scope_attrs(builder, scope_attrs):
     for k, v in scope_attrs.items():
         if k == "core_mode":
             mlir_attrs.update(_handle_core_mode_attr(builder, v))
+        elif k == "vec_mode":
+            if v is not None:
+                mlir_attrs["vec_mode"] = builder.get_string_attr(v)
         elif k == "noinline":
             if not v:
                 mlir_attrs.pop("noinline")

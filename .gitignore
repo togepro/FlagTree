@@ -156,5 +156,6 @@ python/lib/
 third_party/tsingmicro/backend/bin/
 third_party/tsingmicro/backend/lib/
 third_party/flir
+third_party/ascend/AscendNPU-IR
 tsingmicro_launch.log
 python/tsingmicro_launch.log

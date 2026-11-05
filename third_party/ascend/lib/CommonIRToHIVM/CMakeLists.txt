@@ -1,12 +1,15 @@
 add_triton_library(CommonIRToHIVM
   CommonIRToHIVM.cpp
-  ReduceSumStrengthPass.cpp
+  TensorViewAccessAnalysis.cpp
+  TensorViewStrategy.cpp
+  TensorViewLowering.cpp
 
   DEPENDS
   CommonIRToHIVMConversionPassIncGen
 
   LINK_LIBS
   CommonIRIR
+  TensorViewIR
   BiShengIRHIVMDialect
   MLIRIR
   MLIRPass
@@ -16,5 +19,6 @@ add_triton_library(CommonIRToHIVM
   MLIRMemRefDialect
   MLIRTensorDialect
   MLIRBufferizationDialect
+  MLIRLinalgDialect
   MLIRArithDialect
 )

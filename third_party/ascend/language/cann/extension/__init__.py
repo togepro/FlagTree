@@ -1,4 +1,4 @@
-from triton.tools.get_ascend_devices import is_compile_on_910_95
+from triton.backends.ascend.utils import is_compile_on_910_95
 from triton._C.libtriton.ascend import ir as _ascend_ir
 
 # MLIR affine bindings (same objects as triton._C.libtriton.ascend.ir).
@@ -32,6 +32,8 @@ from .core import (
     is_builtin,
     MODE,
     PIPE,
+    SYNC_HINT,
+    EVENT_ID,
     IteratorType,
     sub_vec_id,
     sub_vec_num,
@@ -40,15 +42,17 @@ from .core import (
     sync_block_wait,
     SYNC_IN_VF,
     conv1d,
+    dot,
+    conv2d,
 )
 
 from .scope import scope
 
 from .custom_op import (
     custom,
-    custom_object_semantic,
     custom_semantic,
     register_custom_op,
+    SyncEventSlot,
 )
 
 from . import builtin_custom_ops
@@ -93,12 +97,15 @@ __all__ = [
     "is_builtin",
     "MODE",
     "PIPE",
+    "SYNC_HINT",
+    "EVENT_ID",
     "IteratorType",
     "sub_vec_id",
     "sub_vec_num",
     "sync_block_all",
     "SYNC_IN_VF",
     "conv1d",
+    "conv2d",
 
     # address space
     "ascend_address_space",
@@ -122,9 +129,9 @@ __all__ = [
 
     # custom op
     "custom",
-    "custom_object_semantic",
     "custom_semantic",
     "register_custom_op",
+    "SyncEventSlot",
 
     # math ops
     "atan2",
@@ -151,4 +158,10 @@ __all__ = [
     "gather_out_to_ub",
     "scatter_ub_to_out",
     "index_select_simd",
+
+    # utils
+    "is_compile_on_910_95",
+
+    # dot ops
+    "dot",
 ]

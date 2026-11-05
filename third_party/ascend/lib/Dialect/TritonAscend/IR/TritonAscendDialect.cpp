@@ -1,5 +1,4 @@
-//===- TritonAscendDialect.cpp - TritonAscend Dialect registration
-//--------------===//
+//===- TritonAscendDialect.cpp - TritonAscend Dialect registration --------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -35,6 +34,7 @@ void TritonAscendDialect::initialize() {
 #define GET_ATTRDEF_LIST
 #include "ascend/include/Dialect/TritonAscend/IR/TritonAscendOpsAttrDefs.cpp.inc"
       >();
+  addInterfaces<TritonAscendInlinerInterface>();
 }
 
 #include "ascend/include/Dialect/TritonAscend/IR/TritonAscendDialect.cpp.inc"

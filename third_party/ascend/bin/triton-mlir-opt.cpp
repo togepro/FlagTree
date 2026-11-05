@@ -1,5 +1,4 @@
-//===- triton-mlir-opt.cpp - Triton-Ascend Optimizer Driver -----------*- C++
-//-*-===//
+//===- triton-mlir-opt.cpp - Triton-Ascend Optimizer Driver -----*- C++ -*-===//
 //
 // Copyright (c) Huawei Technologies Co., Ltd. 2025. All rights reserved.
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,10 +20,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "./RegisterTritonDialects.h"
-
 // BishengIR includes
 #include "bishengir/InitAllDialects.h"
+
+#include "ascend/include/CommonIRToHIVM/Passes.h"
+#include "triton-shared/Conversion/TensorViewLowering/Passes.h"
 
 #include "mlir/InitAllDialects.h"
 #include "mlir/InitAllExtensions.h"
@@ -39,6 +39,8 @@ int main(int argc, char **argv) {
 
   // Register BishengIR dialects and passes
   bishengir::registerAllDialects(registry);
+  mlir::triton::registerCommonIRToHIVMPasses();
+  mlir::triton::registerTensorViewLoweringPasses();
 
   return mlir::asMainReturnCode(mlir::MlirOptMain(
       argc, argv, "Triton-Ascend optimizer driver\n", registry));
