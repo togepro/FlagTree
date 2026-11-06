@@ -90,9 +90,16 @@ _EXTENSION_APIS = frozenset({
     "join_mem_tokens",
 })
 
+# The 3.5 TLE frontend exposed the TensorView value/type classes directly
+# from the language package. They now live on triton.language through the
+# Ascend spec overlay, so keep the old attribute names as aliases.
+_LEGACY_LANGUAGE_TYPES = frozenset({"tensor_view", "tensor_view_type"})
+
 
 # Keep ordinary TLE imports independent of backend-specific extensions.
 def __getattr__(name):
+    if name in _LEGACY_LANGUAGE_TYPES:
+        return getattr(_language, name)
     if name in {"tile_load", "tile_store"}:
         from . import dsa
         return getattr(dsa, name)
@@ -144,6 +151,17 @@ __all__ = [
     "MemoryScope",
     "GroupKind",
 ]
+
+if hasattr(_language, "tensor_view_type"):
+    __all__.extend([
+        "tensor_view_type",
+        "tensor_view",
+        "make_partition_view",
+        "make_strided_view",
+        "make_gather_scatter_view",
+        "tile_load",
+        "tile_store",
+    ])
 
 from . import distributed, dsa, gpu, raw
 
