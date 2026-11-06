@@ -6,6 +6,7 @@ llvm_update_compile_flags(triton-mlir-opt)
 
 target_link_libraries(triton-mlir-opt PRIVATE
   ${triton_libs}
+  CommonIRToHIVM
   # MLIR core
   MLIROptLib
   MLIRPass
