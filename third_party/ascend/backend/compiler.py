@@ -316,11 +316,7 @@ def make_ttir(mod, metadata, opt):
     passes.ttir.add_reorder_broadcast(pm)
     ascend.passes.ttir.add_lane_vectorize(pm)
     passes.common.add_cse(pm)
-    # commonir: LICM is intentionally omitted. It hoists tile.to_tensor above
-    # tile.copy in loops, breaking the read-after-write ordering required by
-    # Ascend's buffer semantics and producing "operand does not dominate this
-    # use" errors in bishengir downstream.
-    # passes.common.add_licm(pm)
+    passes.common.add_licm(pm)
     passes.common.add_symbol_dce(pm)
     passes.ttir.add_loop_unroll(pm)
     if opt.enable_graph_optimize:
