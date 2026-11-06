@@ -314,8 +314,13 @@ def make_ttir(mod, metadata, opt):
     passes.ttir.add_combine(pm)
     passes.common.add_canonicalizer(pm)
     passes.ttir.add_reorder_broadcast(pm)
+    ascend.passes.ttir.add_lane_vectorize(pm)
     passes.common.add_cse(pm)
-    passes.common.add_licm(pm)
+    # commonir: LICM is intentionally omitted. It hoists tile.to_tensor above
+    # tile.copy in loops, breaking the read-after-write ordering required by
+    # Ascend's buffer semantics and producing "operand does not dominate this
+    # use" errors in bishengir downstream.
+    # passes.common.add_licm(pm)
     passes.common.add_symbol_dce(pm)
     passes.ttir.add_loop_unroll(pm)
     if opt.enable_graph_optimize:
@@ -393,6 +398,7 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=True):
         ascend.passes.ttir.add_triton_to_llvm(pm)
         ascend.passes.ttir.add_bubble_up_operation(pm)
         ascend.passes.ttir.add_triton_to_structure(pm, False, False)
+        ascend.passes.ttir.add_reduce_sum_strength(pm, metadata.get("enable_reduce_sum_strength", False), 2)
         ascend.passes.ttir.add_triton_to_linalg(pm, False, named_ops, False, enable_select_analysis, compile_on_910_95,
                                                 compile_mode)
         # Restricted to 910_95/950. The merged buffer is written by two disjoint
@@ -402,6 +408,14 @@ def ttir_to_linalg(mod, metadata, opt, *, named_ops=True):
         # bishengir-opt, so the loss happens in code generation.
         if compile_on_910_95:
             ascend.passes.ttir.add_merge_concat_load_buffer(pm)
+        if use_commonir_tensor_view:
+            # Second CommonIR lowering tail from the 3.5 pipeline. It catches
+            # CommonIR ops and unrealized casts exposed by TritonToLinalg and
+            # then folds the resulting IR back to a canonical form.
+            ascend.passes.ttir.add_commonir_to_hivm(pm)
+            passes.common.add_canonicalizer(pm)
+            passes.common.add_cse(pm)
+            passes.common.add_symbol_dce(pm)
         if metadata["enable_dynamic_cv_pipeline"]:
             metadata["set_workspace_multibuffer"] = 0
             metadata["enable_mixed_cv"] = True
@@ -1326,6 +1340,12 @@ class NPUOptions:
     enable_persistent: bool = False
     optimize_epilogue: bool = False
     enable_fp_fusion: bool = True
+    # Reduce sum strength: rewrites an add-reduce (e.g. tl.sum) on a large
+    # power-of-two reduce dim into "pre-add the two halves with vector adds,
+    # then reduce the halved tensor". This reorders floating-point addition,
+    # so at low precision (f16/bf16) the result may differ from the original
+    # summation order by 1~2 ulp. Enabled only when that is acceptable.
+    enable_reduce_sum_strength: bool = False
     launch_cooperative_grid: bool = False
     backend_name: str = 'cann'
     instrumentation_mode: str = ""

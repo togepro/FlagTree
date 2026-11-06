@@ -620,6 +620,7 @@ def _run_make_ttir_with_recorded_graph_options(compiler, monkeypatch, options):
         compiler,
         "ascend",
         SimpleNamespace(passes=SimpleNamespace(ttir=SimpleNamespace(
+            add_lane_vectorize=record("lane_vectorize"),
             add_graph_optimize=lambda _pm, **kwargs: graph_calls.append(kwargs)))),
     )
 

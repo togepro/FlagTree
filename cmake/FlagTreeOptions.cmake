@@ -382,6 +382,11 @@ macro(flagtree_configure_flir_dependency)
                      "${PROJECT_BINARY_DIR}/third_party/flir/include/mlir-ext/Dialect/CommonIR")
     add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/flir/lib/Dialect/CommonIR/IR"
                      "${PROJECT_BINARY_DIR}/third_party/flir/lib/Dialect/CommonIR/IR")
+    # Lane vectorization and layout inference passes used by the 3.5-compatible
+    # CommonIR pipeline. The CommonIR include directory above already adds the
+    # Transforms tablegen target, so only the implementation needs adding.
+    add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/flir/lib/Dialect/CommonIR/Transforms"
+                     "${PROJECT_BINARY_DIR}/third_party/flir/lib/Dialect/CommonIR/Transforms")
     add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/flir/include/triton-shared/Dialect/TensorView"
                      "${PROJECT_BINARY_DIR}/third_party/flir/include/triton-shared/Dialect/TensorView")
     add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/flir/lib/Dialect/TensorView/IR"

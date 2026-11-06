@@ -151,6 +151,7 @@ add_triton_plugin(TritonAscend
   ${CMAKE_CURRENT_SOURCE_DIR}/ascend_ir.cc
   LINK_LIBS
   CommonIRToHIVM
+  CommonIRTransforms
   TensorViewIR
   TritonToGraph
   TritonToLinalg
@@ -161,7 +162,7 @@ add_triton_plugin(TritonAscend
 target_compile_definitions(TritonAscend PRIVATE __TLE_DSA__)
 
 if(TARGET CommonIRToHIVM)
-  add_dependencies(TritonAscend CommonIRToHIVM TensorViewIR)
+  add_dependencies(TritonAscend CommonIRToHIVM CommonIRTransforms TensorViewIR)
 endif()
 
 target_include_directories(TritonAscend BEFORE PRIVATE
