@@ -1077,6 +1077,11 @@ class TritonSemantic(Generic[TensorTy]):
                              "pointers or loading a scalar. Because the compiler does not know the boundary; please "
                              "use block pointers (defined by `make_block_ptr`) instead")
 
+        # Honor backend requirements for masked loads with no explicit fallback.
+        if mask is not None and other is None and getattr(self.builder, "masked_load_default_zero", False):
+            elt_ty = ptr.type.scalar.element_ty
+            other = self.to_tensor(0.0 if elt_ty.is_floating() else 0)
+
         # For a pointer of scalar, check the type of `mask` and `other`
         if not ptr.type.is_block():
             if mask and mask.type.is_block():

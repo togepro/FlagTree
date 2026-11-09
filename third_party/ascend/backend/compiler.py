@@ -1560,6 +1560,7 @@ def _initialize_ascend_builder(main_builder, context, options):
     ascend_builder = ascend.ir.ascendnpu_ir_builder(context, target_arch, parallel_mode)
     setup_unified_builder(main_builder, ascend_builder)
     setup_unified_builder_with_buffer_builder(main_builder, buffer_ir.buffer_builder(context))
+    main_builder.masked_load_default_zero = True
 
 
 def _get_npu_options_arch(options: NPUOptions) -> str:
